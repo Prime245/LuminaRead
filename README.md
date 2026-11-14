@@ -1,6 +1,6 @@
 # LuminaRead AI
 
-LuminaRead AI is a browser-based book companion with Story Mode and Study Mode. It can search public book catalogs, process uploaded books, create study materials, and narrate lessons.
+An AI-powered book companion for stories and study, with visual lessons and narration. LuminaRead AI can search public book catalogs, process uploaded books, create study materials, and narrate lessons.
 
 ## Features
 
