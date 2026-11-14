@@ -1,0 +1,9 @@
+﻿{
+  "name": "LuminaRead AI — Story & Study Book Companion",
+  "short_name": "LuminaRead AI",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b0914",
+  "theme_color": "#f59e0b",
+  "description": "Search or upload any book and master it through Story Mode visuals & audio or Study Mode definitions, cheat sheets, quizzes, and graphs."
+}
