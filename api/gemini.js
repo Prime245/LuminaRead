@@ -1,11 +1,11 @@
-﻿export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: "GEMINI_API_KEY is not configured in Vercel Environment Variables." });
+    return res.status(500).json({ error: "Set GEMINI_API_KEY in Vercel Environment Variables." });
   }
 
   const { prompt } = req.body || {};

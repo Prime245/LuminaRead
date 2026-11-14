@@ -26,6 +26,7 @@ let aiConfig = JSON.parse(localStorage.getItem("luminaread_ai_config") || "null"
   apiKey: "",
   openaiModel: "gpt-4o-mini"
 };
+if (aiConfig.provider === "ollama" && !aiConfig.apiKey) aiConfig.provider = "gemini";
 
 const BOOK_LIBRARY = {
   "atomic-habits": {
@@ -160,7 +161,16 @@ async function callConfiguredLLM(promptText) {
     return (await res.json()).response;
   }
   if (aiConfig.provider === "gemini") {
-    if (!aiConfig.apiKey) throw new Error("Paste your Gemini API key in AI Engine settings.");
+    if (!aiConfig.apiKey) {
+      const proxyRes = await fetch("/api/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: promptText })
+      });
+      const proxyData = await proxyRes.json().catch(() => ({}));
+      if (proxyRes.ok && proxyData.text) return proxyData.text;
+      throw new Error(proxyData.error || "Set GEMINI_API_KEY in Vercel Environment Variables.");
+    }
     for (const model of ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]) {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(aiConfig.apiKey)}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
