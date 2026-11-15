@@ -147,6 +147,55 @@ async function fetchJsonWithTimeout(url, options, timeoutMs = 65000) {
   }
 }
 
+const CHAPTER_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    cleanTitle: { type: "string" },
+    storyNarrative: { type: "array", items: { type: "string" } },
+    studyNarrative: { type: "array", items: { type: "string" } },
+    storyMoral: { type: "string" },
+    studyTakeaway: { type: "string" },
+    storyCharacters: { type: "array", items: { type: "string" } },
+    storyNextBridge: { type: "string" },
+    chapterSummary: { type: "string" },
+    pointsToRemember: { type: "array", items: { type: "string" } },
+    topicsCovered: { type: "array", items: { type: "string" } },
+    storySvg: { type: "string" },
+    studySvg: { type: "string" },
+    definitions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          term: { type: "string" },
+          cat: { type: "string" },
+          def: { type: "string" },
+          ex: { type: "string" }
+        },
+        required: ["term", "cat", "def", "ex"]
+      }
+    },
+    quiz: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          q: { type: "string" },
+          options: { type: "array", items: { type: "string" } },
+          answer: { type: "integer" },
+          explanation: { type: "string" }
+        },
+        required: ["q", "options", "answer", "explanation"]
+      }
+    }
+  },
+  required: [
+    "cleanTitle", "storyNarrative", "studyNarrative", "storyMoral", "studyTakeaway",
+    "storyCharacters", "storyNextBridge", "chapterSummary", "pointsToRemember",
+    "topicsCovered", "storySvg", "studySvg", "definitions", "quiz"
+  ]
+};
+
 async function detectOllamaModels() {
   const url = (document.getElementById("ollamaUrlInput").value || "http://localhost:11434").replace(/\/$/, "");
   const statusEl = document.getElementById("ollamaStatus");
@@ -178,7 +227,9 @@ function saveAiSettings() {
   if (ch) generateChapterWithAI(ch, true);
 }
 
-async function callConfiguredLLM(promptText) {
+async function callConfiguredLLM(promptText, responseSchema = null) {
+  const generationConfig = { responseMimeType: "application/json", maxOutputTokens: 8192 };
+  if (responseSchema) generationConfig.responseJsonSchema = responseSchema;
   if (aiConfig.provider === "ollama") {
     const res = await fetch(`${aiConfig.ollamaUrl}/api/generate`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -195,7 +246,7 @@ async function callConfiguredLLM(promptText) {
       const { response: proxyRes, data: proxyData } = await fetchJsonWithTimeout("/api/gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: promptText })
+        body: JSON.stringify({ prompt: promptText, responseJsonSchema: responseSchema })
       });
       if (proxyRes.status === 404) throw new Error("Gemini endpoint /api/gemini was not found. Deploy the project to Vercel.");
       if (proxyRes.ok && proxyData.text) return proxyData.text;
@@ -205,9 +256,14 @@ async function callConfiguredLLM(promptText) {
     for (const model of ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]) {
       const { response: res, data } = await fetchJsonWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(aiConfig.apiKey)}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4096 } })
+        body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }], generationConfig })
       });
-      if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) return data.candidates[0].content.parts[0].text;
+      const candidate = data.candidates?.[0];
+      if (res.ok && candidate?.finishReason === "MAX_TOKENS") {
+        lastError = `Gemini reached the output token limit for ${model}; try a smaller lesson.`;
+        continue;
+      }
+      if (res.ok && candidate?.content?.parts?.[0]?.text) return candidate.content.parts[0].text;
       lastError = data?.error?.message || `Gemini API returned HTTP ${res.status} for ${model}.`;
       if ([400, 401, 403, 429].includes(res.status)) throw new Error(lastError);
     }
@@ -229,6 +285,7 @@ async function callConfiguredLLM(promptText) {
 async function generateChapterWithAI(ch, forceRefresh = false) {
   if (!chapterNeedsAI(ch) && !forceRefresh) return;
   ch.aiGenerationFailed = false;
+  if (activeBook.chapters[activeChapterIdx] === ch) loadChapterVisuals(ch);
   const banner = document.getElementById("aiStatusBanner"), statusText = document.getElementById("aiBannerText");
   banner.classList.remove("hidden"); banner.classList.add("generating");
   statusText.textContent = `🤖 ${aiConfig.provider.toUpperCase()} is crafting Story, Study Cheat Sheet, Quiz & Custom SVG Visuals for Chapter ${ch.number}...`;
@@ -263,7 +320,7 @@ Return strictly this JSON:
 }`;
 
   try {
-    const rawJson = await callConfiguredLLM(prompt);
+    const rawJson = await callConfiguredLLM(prompt, CHAPTER_RESPONSE_SCHEMA);
     const parsed = JSON.parse(rawJson.replace(/```json|```/g, "").trim());
     if (parsed.cleanTitle) ch.title = parsed.cleanTitle;
     if (Array.isArray(parsed.storyNarrative) && parsed.storyNarrative.length) ch.storyNarrative = parsed.storyNarrative;

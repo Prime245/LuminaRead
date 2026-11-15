@@ -8,7 +8,7 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: "Set GEMINI_API_KEY in Vercel Environment Variables." });
   }
 
-  const { prompt } = req.body || {};
+  const { prompt, responseJsonSchema } = req.body || {};
   if (!prompt) {
     return res.status(400).json({ error: "Missing prompt" });
   }
@@ -16,6 +16,8 @@ module.exports = async function handler(req, res) {
   const models = ["gemini-3.8-flash", "gemini-3.6-flash"];
   const totalTimeoutMs = 55000;
   const deadline = Date.now() + totalTimeoutMs;
+  const generationConfig = { responseMimeType: "application/json", maxOutputTokens: 8192 };
+  if (responseJsonSchema) generationConfig.responseJsonSchema = responseJsonSchema;
   let lastError = "Gemini request failed";
 
   for (const model of models) {
@@ -32,7 +34,7 @@ module.exports = async function handler(req, res) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4096 }
+            generationConfig
           }),
           signal: controller.signal
         }
@@ -48,7 +50,12 @@ module.exports = async function handler(req, res) {
       clearTimeout(timeoutId);
     }
 
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const candidate = data?.candidates?.[0];
+    if (response.ok && candidate?.finishReason === "MAX_TOKENS") {
+      lastError = `Gemini reached the output token limit on ${model}; try a smaller lesson.`;
+      continue;
+    }
+    const text = candidate?.content?.parts?.[0]?.text;
     if (response.ok && text) {
       return res.status(200).json({ text });
     }
