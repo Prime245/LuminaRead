@@ -152,7 +152,7 @@ body.mode-study::before {
 .visual-stage .visual-svg svg { width: 100%; height: 100%; display: block; }
 .visual-status-pill { position: absolute; top: 12px; right: 12px; z-index: 5; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 999px; padding: 0.25rem 0.7rem; font-size: 0.72rem; color: var(--text-secondary); }
 .visual-footer { display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 1rem; background: rgba(0, 0, 0, 0.72); font-size: 0.8rem; color: var(--text-secondary); flex-wrap: wrap; gap: 0.5rem; }
-.trending-section { overflow: hidden; margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: 20px; background: radial-gradient(circle at 50% 0%, rgba(251, 191, 36, 0.08), transparent 65%); }
+.trending-section { overflow: hidden; margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: 20px; background: radial-gradient(circle at 50% 0%, rgba(251, 191, 36, 0.08), transparent 65%); box-shadow: 0 16px 42px rgba(0, 0, 0, 0.2); }
 .book-carousel-wrap { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 0.55rem; overflow: hidden; padding: 1rem 0; }
 .carousel-header-label { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0 1.25rem; color: var(--accent-primary); font-size: 0.76rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .carousel-hint { color: var(--text-secondary); font-size: 0.68rem; font-weight: 500; letter-spacing: 0; text-align: right; text-transform: none; }
@@ -160,9 +160,9 @@ body.mode-study::before {
 .book-carousel-wrap:hover .carousel-marquee, .book-carousel-wrap:focus-within .carousel-marquee { animation-play-state: paused; }
 @keyframes bookMarquee { to { transform: translateX(-50%); } }
 .carousel-track { display: flex; gap: 1rem; padding-right: 1rem; }
-.carousel-book-card { position: relative; display: flex; width: 148px; flex-shrink: 0; flex-direction: column; gap: 0.15rem; overflow: hidden; padding: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 12px; background: rgba(20, 16, 32, 0.9); color: var(--text-primary); cursor: pointer; text-align: left; transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease; }
+.carousel-book-card { position: relative; display: flex; width: 148px; flex-shrink: 0; flex-direction: column; gap: 0.15rem; overflow: hidden; padding: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 12px; background: linear-gradient(160deg, rgba(33, 25, 49, 0.97), rgba(11, 9, 20, 0.98)); color: var(--text-primary); cursor: pointer; text-align: left; transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease; }
 .carousel-book-card:hover, .carousel-book-card:focus-visible { z-index: 2; transform: translateY(-5px) scale(1.03); border-color: var(--accent-primary); outline: none; box-shadow: 0 12px 28px rgba(0, 0, 0, 0.65), 0 0 18px var(--accent-glow); }
-.carousel-cover, .carousel-cover-placeholder { display: grid; width: 100%; height: 185px; flex: 0 0 auto; place-items: center; margin-bottom: 0.25rem; border-radius: 8px; background: linear-gradient(135deg, #2b223d, #130f1e); object-fit: cover; font-size: 2rem; }
+.carousel-cover, .carousel-cover-placeholder { display: grid; width: 100%; height: 185px; flex: 0 0 auto; place-items: center; margin-bottom: 0.25rem; border-radius: 8px; background: linear-gradient(135deg, #2b223d, #130f1e); object-fit: cover; image-rendering: auto; font-size: 2rem; }
 .carousel-cover-placeholder[hidden] { display: none; }
 .carousel-badge { position: absolute; top: 10px; left: 10px; z-index: 1; padding: 0.16rem 0.45rem; border: 1px solid var(--accent-primary); border-radius: 999px; background: rgba(0, 0, 0, 0.8); color: #fff; font-size: 0.64rem; font-weight: 700; }
 .carousel-book-title, .carousel-book-author { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -178,19 +178,25 @@ body.mode-study::before {
   .carousel-track[aria-hidden="true"] { display: none; }
 }
 .waiting-cover-box { position: absolute; inset: 0; z-index: 6; overflow: hidden; border-radius: inherit; background: #090d16; animation: waitingCoverFade 0.8s ease; }
-.waiting-cover-img { position: absolute; inset: 0; z-index: 1; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; filter: brightness(0.92) contrast(1.04); animation: waitingCoverZoom 10s linear forwards; }
+.waiting-cover-img { position: absolute; inset: 0; z-index: 1; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; filter: brightness(0.92) contrast(1.04) saturate(1.06); opacity: 0; transition: opacity 0.65s ease; }
+.waiting-cover-img.is-loaded { opacity: 1; animation: waitingCoverZoom 10s linear forwards; }
 .waiting-cover-fallback { position: absolute; inset: 0; z-index: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; color: #f8fafc; text-align: center; }
 .waiting-cover-fallback .wc-eyebrow { margin-bottom: 0.75rem; font-size: 0.75rem; letter-spacing: 0.22em; opacity: 0.8; text-transform: uppercase; }
 .waiting-cover-fallback .wc-title { max-width: 16ch; font-size: clamp(1.6rem, 3.2vw, 2.5rem); font-weight: 800; line-height: 1.15; text-shadow: 0 6px 24px rgba(0, 0, 0, 0.6); }
 .waiting-cover-fallback .wc-author { margin-top: 0.75rem; font-size: 1rem; font-weight: 500; opacity: 0.9; }
-.waiting-cover-overlay { position: absolute; inset: auto 0 0; z-index: 2; display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; padding: 2.5rem 1.25rem 1rem; background: linear-gradient(to top, rgba(6, 9, 19, 0.92), rgba(6, 9, 19, 0.45) 55%, transparent); color: #f8fafc; }
-.waiting-cover-meta strong { display: block; font-size: 1rem; line-height: 1.2; }
+.waiting-cover-box::after { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, rgba(4, 8, 18, 0.08), transparent 42%, rgba(4, 8, 18, 0.18)); content: ""; pointer-events: none; }
+.waiting-cover-overlay { position: absolute; inset: auto 0 0; z-index: 3; display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; padding: 3.25rem 1.5rem 1.25rem; background: linear-gradient(to top, rgba(6, 9, 19, 0.96), rgba(6, 9, 19, 0.52) 58%, transparent); color: #f8fafc; }
+.waiting-cover-meta strong { display: block; font-family: var(--font-heading); font-size: clamp(1.05rem, 2.1vw, 1.55rem); line-height: 1.2; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.5); }
 .waiting-cover-meta span { color: #cbd5e1; font-size: 0.8rem; }
-.waiting-cover-pill { padding: 0.3rem 0.65rem; border: 1px solid rgba(251, 191, 36, 0.45); border-radius: 999px; background: rgba(15, 23, 42, 0.75); color: #fde68a; font-size: 0.72rem; white-space: nowrap; }
+.waiting-cover-pill { padding: 0.4rem 0.75rem; border: 1px solid rgba(251, 191, 36, 0.5); border-radius: 999px; background: rgba(15, 23, 42, 0.78); backdrop-filter: blur(12px); color: #fde68a; font-size: 0.72rem; white-space: nowrap; }
 @keyframes waitingCoverFade { from { opacity: 0.25; } to { opacity: 1; } }
 @keyframes waitingCoverZoom { from { transform: scale(1); } to { transform: scale(1.06); } }
 @media (prefers-reduced-motion: reduce) {
   .waiting-cover-box, .waiting-cover-img { animation: none; }
+  .waiting-cover-img { opacity: 1; }
+}
+@media (max-width: 600px) {
+  .waiting-cover-overlay { align-items: flex-start; flex-direction: column; gap: 0.65rem; padding: 3rem 1rem 1rem; }
 }
 
 .narrative-box { background: rgba(0, 0, 0, 0.26); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 15px; padding: 1.4rem; margin-bottom: 1.35rem; font-size: 1.03rem; line-height: 1.85; }

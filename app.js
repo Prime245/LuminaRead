@@ -427,7 +427,7 @@ function renderBookCoverCarousel() {
   const buildCard = (book, index) => `
     <button class="carousel-book-card" type="button" onclick="selectCarouselBook(${index})" aria-label="Open ${escapeHtml(book.title)} by ${escapeHtml(book.author)}">
       <span class="carousel-badge">${book.isForYou ? "✨ For You" : "🔥 Trending"}</span>
-      <img class="carousel-cover" src="${book.coverUrl}" alt="Cover of ${escapeHtml(book.title)}" onerror="this.hidden=true;this.nextElementSibling.hidden=false" />
+      <img class="carousel-cover" src="${escapeHtml(book.coverUrl)}" data-fallback-src="${escapeHtml(book.fallbackCoverUrl || "")}" alt="Cover of ${escapeHtml(book.title)}" onerror="if(this.dataset.fallbackSrc){this.src=this.dataset.fallbackSrc;this.dataset.fallbackSrc=''}else{this.hidden=true;this.nextElementSibling.hidden=false}" />
       <span class="carousel-cover-placeholder" hidden aria-hidden="true">📘</span>
       <span class="carousel-book-title">${escapeHtml(book.title)}</span>
       <span class="carousel-book-author">${escapeHtml(book.author)}</span>
@@ -462,8 +462,83 @@ const WAITING_FAMOUS_COVERS = [
   { title: "1984", author: "George Orwell", coverUrl: "https://covers.openlibrary.org/b/isbn/9780451524935-L.jpg?default=false", bg: "radial-gradient(circle at 50% 25%, #dc2626 0%, #450a0a 55%, #09090b 100%)" },
   { title: "Atomic Habits", author: "James Clear", coverUrl: "https://covers.openlibrary.org/b/id/10521270-L.jpg?default=false", bg: "radial-gradient(circle at 50% 25%, #f59e0b 0%, #78350f 55%, #1c1917 100%)" }
 ];
+const googleBooksCoverRequests = new Map();
 let waitingCoverIndex = 0;
 let waitingCoverTimer = null;
+
+function getBestGoogleBookCover(imageLinks) {
+  const imageUrl = imageLinks && (imageLinks.extraLarge || imageLinks.large || imageLinks.medium || imageLinks.small || imageLinks.thumbnail || imageLinks.smallThumbnail);
+  if (!imageUrl) return "";
+  try {
+    const url = new URL(imageUrl);
+    url.protocol = "https:";
+    url.searchParams.set("zoom", "3");
+    return url.href;
+  } catch (error) {
+    console.warn("Google Books returned an invalid cover URL.", error);
+    return "";
+  }
+}
+
+async function fetchGoogleBookCover(book) {
+  const cacheKey = normalizeStr(`${book.title} ${book.author}`);
+  if (googleBooksCoverRequests.has(cacheKey)) return googleBooksCoverRequests.get(cacheKey);
+  const request = (async () => {
+    try {
+      const query = `intitle:"${book.title}" inauthor:"${book.author}"`;
+      const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=5&printType=books`);
+      if (!response.ok) return { error: new Error(`Google Books returned ${response.status}`), status: response.status };
+      const data = await response.json();
+      const targetTitle = normalizeStr(book.title);
+      const match = (data.items || []).find(volume => normalizeStr(volume.volumeInfo?.title).includes(targetTitle));
+      return { coverUrl: match ? getBestGoogleBookCover(match.volumeInfo?.imageLinks) : "" };
+    } catch (error) {
+      return { error, status: 0 };
+    }
+  })();
+  googleBooksCoverRequests.set(cacheKey, request);
+  return request;
+}
+
+async function loadGoogleBookCovers() {
+  const booksByTitle = new Map();
+  [...TRENDING_BOOKS_CATALOG, ...WAITING_FAMOUS_COVERS].forEach(book => {
+    if (!book.coverUrl) return;
+    const key = normalizeStr(`${book.title} ${book.author}`);
+    if (!booksByTitle.has(key)) booksByTitle.set(key, []);
+    booksByTitle.get(key).push(book);
+  });
+  const books = Array.from(booksByTitle.values());
+  let trendingUpdated = false, waitingUpdated = false;
+  for (let index = 0; index < books.length; index += 3) {
+    const results = await Promise.all(books.slice(index, index + 3).map(async group => ({
+      group,
+      result: await fetchGoogleBookCover(group[0])
+    })));
+    const failures = results.filter(entry => entry.result.error);
+    results.forEach(({ group, result }) => {
+      if (!result.coverUrl) return;
+      group.forEach(book => {
+        if (!book.fallbackCoverUrl) book.fallbackCoverUrl = book.coverUrl;
+        book.coverUrl = result.coverUrl;
+        if (TRENDING_BOOKS_CATALOG.includes(book)) trendingUpdated = true;
+        if (WAITING_FAMOUS_COVERS.includes(book)) waitingUpdated = true;
+      });
+    });
+    if (failures.length) {
+      const rateLimited = failures.some(entry => entry.result.status === 429);
+      console.warn(
+        rateLimited
+          ? "Google Books cover requests were rate limited; keeping the bundled cover fallbacks."
+          : "Some Google Books cover requests failed; keeping the bundled cover fallbacks.",
+        failures[0].result.error
+      );
+      break;
+    }
+  }
+  if (trendingUpdated) renderTopTrendingCarousel();
+  if (waitingUpdated && WAITING_FAMOUS_COVERS[waitingCoverIndex].coverUrl) renderWaitingCoverBox();
+}
 
 function renderWaitingCoverBox() {
   const stage = document.querySelector(".visual-stage");
@@ -478,7 +553,7 @@ function renderWaitingCoverBox() {
   box.setAttribute("role", "img");
   box.setAttribute("aria-label", `Featured book cover: ${item.title} by ${item.author}`);
   const image = item.coverUrl
-    ? `<img class="waiting-cover-img" src="${item.coverUrl}" alt="${escapeHtml(item.title)} cover" onerror="this.hidden=true" />`
+    ? `<img class="waiting-cover-img" src="${escapeHtml(item.coverUrl)}" data-fallback-src="${escapeHtml(item.fallbackCoverUrl || "")}" alt="${escapeHtml(item.title)} cover" onload="this.classList.add('is-loaded')" onerror="if(this.dataset.fallbackSrc){this.src=this.dataset.fallbackSrc;this.dataset.fallbackSrc=''}else{this.hidden=true}" />`
     : "";
   box.innerHTML = `
     <div class="waiting-cover-fallback" style="background: ${item.bg};">
@@ -583,7 +658,7 @@ async function searchInternetBooks() {
         const info = item.volumeInfo || {}, title = info.title || "Untitled Book", key = normalizeStr(title);
         if (!seenTitles.has(key)) {
           seenTitles.add(key);
-          candidates.push({ id: item.id, title, author: info.authors?.[0] || "Unknown Author", year: (info.publishedDate || "2020").slice(0, 4), category: info.categories?.[0] || "Non-Fiction & Literature", description: stripDryMetadata(info.description || ""), coverUrl: info.imageLinks ? (info.imageLinks.thumbnail || "").replace("http:", "https:") : "" });
+          candidates.push({ id: item.id, title, author: info.authors?.[0] || "Unknown Author", year: (info.publishedDate || "2020").slice(0, 4), category: info.categories?.[0] || "Non-Fiction & Literature", description: stripDryMetadata(info.description || ""), coverUrl: getBestGoogleBookCover(info.imageLinks) });
         }
       });
     }
@@ -1004,7 +1079,7 @@ function showToast(msg) { const el = document.getElementById("toast"); el.textCo
 function escapeHtml(str) { return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 
 window.addEventListener("DOMContentLoaded", () => {
-  loadAvailableVoices(); const _savedShelf = getUserBookshelf(); const _lastTitle = localStorage.getItem(ACTIVE_BOOK_KEY); const _found = _savedShelf.find(b => b.title === _lastTitle) || _savedShelf[0]; if (_found) activeBook = _found; renderTopTrendingCarousel(); renderBookWorkspace(); renderUserBookshelf();
+  loadAvailableVoices(); const _savedShelf = getUserBookshelf(); const _lastTitle = localStorage.getItem(ACTIVE_BOOK_KEY); const _found = _savedShelf.find(b => b.title === _lastTitle) || _savedShelf[0]; if (_found) activeBook = _found; renderTopTrendingCarousel(); renderBookWorkspace(); renderUserBookshelf(); loadGoogleBookCovers();
   window.addEventListener("resize", () => { const ch = activeBook.chapters[activeChapterIdx]; if (ch) { drawStudyGraphs(ch); renderProceduralCanvasArt(document.getElementById("procVisualCanvas"), ch, currentMode); } });
   window.addEventListener("keydown", (e) => {
     if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;

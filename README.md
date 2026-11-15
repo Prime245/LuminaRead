@@ -15,6 +15,7 @@ The key is only read by the `/api/gemini` serverless function; it is not exposed
 - Picks are ranked using titles, categories, and topics from the books saved on that user's private bookshelf, and update when that shelf changes. Select a cover to open its book.
 - Story and Study chapter visuals remain in their existing visual panel.
 - Until the current mode's AI visual is ready, that panel shows full-frame book covers that rotate every 10 seconds. Rotation is reduced for users who prefer less motion.
+- Cover images use the largest size Google Books provides when available, with bundled cover fallbacks. Google Books does not guarantee 4K resolution.
 - Book recommendations use a curated catalog; personalization is local to the user's browser.
 
 ## Privacy & Per-User Bookshelf
