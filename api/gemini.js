@@ -13,36 +13,43 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: "Missing prompt" });
   }
 
-  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+  const models = ["gemini-3.8-flash", "gemini-3.6-flash"];
   let lastError = "Gemini request failed";
 
   for (const model of models) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    let response, data;
     try {
-      const genCfg = { responseMimeType: "application/json" };
-      if (model.includes("2.5")) genCfg.thinkingConfig = { thinkingBudget: 0 };
-
-      const response = await fetch(
+      response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: genCfg
-          })
+            generationConfig: { responseMimeType: "application/json" }
+          }),
+          signal: controller.signal
         }
       );
-
-      const data = await response.json().catch(() => ({}));
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (response.ok && text) {
-        return res.status(200).json({ text });
-      }
-      lastError = data?.error?.message || `HTTP ${response.status} on ${model}`;
-      if (response.status === 400 || response.status === 403) break;
+      data = await response.json();
     } catch (err) {
-      lastError = err.message;
+      lastError = controller.signal.aborted
+        ? `Gemini timed out after 20 seconds on ${model}`
+        : err.message;
+      if (controller.signal.aborted) break;
+      continue;
+    } finally {
+      clearTimeout(timeoutId);
     }
+
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (response.ok && text) {
+      return res.status(200).json({ text });
+    }
+    lastError = data?.error?.message || `HTTP ${response.status} on ${model}`;
+    if ([400, 401, 403, 429].includes(response.status)) break;
   }
 
   return res.status(502).json({ error: lastError });

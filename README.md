@@ -8,7 +8,8 @@
    - **Value:** Your Google Gemini API key
 4. Redeploy. The app uses this server-side key for Gemini requests, so visitors don't need to enter their own key. Leave the Personal API Key field blank and select Gemini.
 
-The key is only read by the `/api/gemini` serverless function; it is not exposed to browsers. The shared endpoint uses your Gemini quota, so monitor usage and configure limits for the API key and deployment.
+The deployment-level key is only read by the `/api/gemini` serverless function; it is not exposed to browsers. The shared endpoint uses your Gemini quota, so monitor usage and configure limits for the API key and deployment.
+The browser starts Gemini generation when a chapter is missing either mode's SVG, and switches to its local visual if generation fails or times out. Gemini requires the deployed Vercel endpoint when no personal API key is supplied; opening `index.html` directly does not provide that backend.
 
 ## Story Visual Recommendations
 - A scrolling carousel of popular book picks appears in its own section above the workspace, independently of chapter visuals.

@@ -120,6 +120,33 @@ function toggleAiProviderFields() {
   document.getElementById("cloudApiFields").classList.toggle("hidden", p === "ollama");
 }
 
+function chapterNeedsAI(ch) {
+  return !ch.aiEnhanced || !ch.storySvg || !ch.studySvg;
+}
+
+async function fetchJsonWithTimeout(url, options, timeoutMs = 45000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      if (controller.signal.aborted) throw error;
+      throw new Error(`Gemini returned invalid JSON (HTTP ${response.status}): ${error.message}`);
+    }
+    return { response, data };
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`Gemini request timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function detectOllamaModels() {
   const url = (document.getElementById("ollamaUrlInput").value || "http://localhost:11434").replace(/\/$/, "");
   const statusEl = document.getElementById("ollamaStatus");
@@ -162,25 +189,29 @@ async function callConfiguredLLM(promptText) {
   }
   if (aiConfig.provider === "gemini") {
     if (!aiConfig.apiKey) {
-      const proxyRes = await fetch("/api/gemini", {
+      if (location.protocol === "file:") {
+        throw new Error("Gemini needs the deployed Vercel app or a local API server; opening index.html directly cannot reach /api/gemini.");
+      }
+      const { response: proxyRes, data: proxyData } = await fetchJsonWithTimeout("/api/gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: promptText })
       });
-      const proxyData = await proxyRes.json().catch(() => ({}));
+      if (proxyRes.status === 404) throw new Error("Gemini endpoint /api/gemini was not found. Deploy the project to Vercel.");
       if (proxyRes.ok && proxyData.text) return proxyData.text;
-      throw new Error(proxyData.error || "Set GEMINI_API_KEY in Vercel Environment Variables.");
+      throw new Error(proxyData.error || `Gemini service returned HTTP ${proxyRes.status}.`);
     }
-    for (const model of ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]) {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(aiConfig.apiKey)}`, {
+    let lastError = "Gemini API request failed.";
+    for (const model of ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]) {
+      const { response: res, data } = await fetchJsonWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(aiConfig.apiKey)}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }], generationConfig: { responseMimeType: "application/json" } })
       });
-      const data = await res.json().catch(() => ({}));
       if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) return data.candidates[0].content.parts[0].text;
-      if (res.status === 400 || res.status === 403) throw new Error(data?.error?.message || `HTTP ${res.status}`);
+      lastError = data?.error?.message || `Gemini API returned HTTP ${res.status} for ${model}.`;
+      if ([400, 401, 403, 429].includes(res.status)) throw new Error(lastError);
     }
-    throw new Error("Gemini API request failed");
+    throw new Error(lastError);
   }
   if ((aiConfig.provider === "openai" || aiConfig.provider === "groq") && aiConfig.apiKey) {
     const endpoint = aiConfig.provider === "groq" ? "https://api.groq.com/openai/v1/chat/completions" : "https://api.openai.com/v1/chat/completions";
@@ -196,7 +227,8 @@ async function callConfiguredLLM(promptText) {
 }
 
 async function generateChapterWithAI(ch, forceRefresh = false) {
-  if (ch.aiEnhanced && !forceRefresh) return;
+  if (!chapterNeedsAI(ch) && !forceRefresh) return;
+  ch.aiGenerationFailed = false;
   const banner = document.getElementById("aiStatusBanner"), statusText = document.getElementById("aiBannerText");
   banner.classList.remove("hidden"); banner.classList.add("generating");
   statusText.textContent = `🤖 ${aiConfig.provider.toUpperCase()} is crafting Story, Study Cheat Sheet, Quiz & Custom SVG Visuals for Chapter ${ch.number}...`;
@@ -250,13 +282,19 @@ Return strictly this JSON:
     if (Array.isArray(parsed.definitions) && parsed.definitions.length) ch.definitions = parsed.definitions;
     if (Array.isArray(parsed.quiz) && parsed.quiz.length) ch.quiz = parsed.quiz;
 
-    ch.aiEnhanced = true; saveBookToUserShelf(activeBook); banner.classList.remove("generating");
-    statusText.textContent = `✨ AI-Generated Lesson & Custom Visuals (${aiConfig.provider.toUpperCase()})`;
+    ch.aiEnhanced = true;
+    ch.aiGenerationFailed = !ch.storySvg || !ch.studySvg;
+    saveBookToUserShelf(activeBook); banner.classList.remove("generating");
+    statusText.textContent = ch.aiGenerationFailed
+      ? `⚠️ ${aiConfig.provider.toUpperCase()} returned no SVG; showing the local visual instead.`
+      : `✨ AI-Generated Lesson & Custom Visuals (${aiConfig.provider.toUpperCase()})`;
     renderBookWorkspace();
     showToast(`✨ Chapter ${ch.number} generated by AI!`);
   } catch (err) {
+    ch.aiGenerationFailed = true;
     banner.classList.remove("generating");
     statusText.textContent = `⚠️ AI: ${err.message} — Using Smart Local Mode`;
+    if (activeBook.chapters[activeChapterIdx] === ch) renderChapterContent();
   }
 }
 
@@ -592,6 +630,9 @@ function loadChapterVisuals(ch) {
   if (aiSvg) {
     stopWaitingCoverSlideshow();
     document.getElementById("visualStatusPill").textContent = "✨ AI-Crafted SVG Visual";
+  } else if (ch.aiGenerationFailed) {
+    stopWaitingCoverSlideshow();
+    document.getElementById("visualStatusPill").textContent = "✨ Smart Local Visual";
   } else {
     startWaitingCoverSlideshow();
     document.getElementById("visualStatusPill").textContent = "📚 Waiting for chapter visual";
@@ -612,7 +653,7 @@ function selectCarouselBook(index) {
   renderBookWorkspace();
   stopAllAudio();
   showToast(`📚 Opened "${activeBook.title}"`);
-  if (!activeBook.chapters[0].aiEnhanced) generateChapterWithAI(activeBook.chapters[0]);
+  if (chapterNeedsAI(activeBook.chapters[0])) generateChapterWithAI(activeBook.chapters[0]);
 }
 
 function toggleVisualFrame() {
@@ -694,7 +735,7 @@ function selectSearchedBook(idx) {
   const cand = lastSearchCandidates[idx]; if (!cand) return;
   activeBook = normalizeStr(cand.title).includes("atomic habits") ? BOOK_LIBRARY["atomic-habits"] : synthesizeBookPackage(cand);
   activeChapterIdx = 0; saveBookToUserShelf(activeBook); renderBookWorkspace(); stopAllAudio(); showToast(`Loaded "${activeBook.title}"`);
-  if (!activeBook.chapters[0].aiEnhanced) generateChapterWithAI(activeBook.chapters[0]);
+  if (chapterNeedsAI(activeBook.chapters[0])) generateChapterWithAI(activeBook.chapters[0]);
 }
 
 function extractKeyTermsFromText(text) {
@@ -874,7 +915,7 @@ function renderBookWorkspace() {
 function selectChapter(idx) {
   activeChapterIdx = idx; switchStageTab("lesson"); renderBookWorkspace(); stopAllAudio();
   const ch = activeBook.chapters[idx];
-  if (ch && !ch.aiEnhanced) generateChapterWithAI(ch);
+  if (ch && chapterNeedsAI(ch)) generateChapterWithAI(ch);
 }
 
 function regenerateVisualScene() { visualSeed = Math.floor(Math.random() * 9000) + 100; renderChapterContent(); }
@@ -1075,7 +1116,7 @@ function showToast(msg) { const el = document.getElementById("toast"); el.textCo
 function escapeHtml(str) { return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 
 window.addEventListener("DOMContentLoaded", () => {
-  loadAvailableVoices(); const _savedShelf = getUserBookshelf(); const _lastTitle = localStorage.getItem(ACTIVE_BOOK_KEY); const _found = _savedShelf.find(b => b.title === _lastTitle) || _savedShelf[0]; if (_found) activeBook = _found; renderTopTrendingCarousel(); renderBookWorkspace(); renderUserBookshelf(); loadGoogleBookCovers();
+  loadAvailableVoices(); const _savedShelf = getUserBookshelf(); const _lastTitle = localStorage.getItem(ACTIVE_BOOK_KEY); const _found = _savedShelf.find(b => b.title === _lastTitle) || _savedShelf[0]; if (_found) activeBook = _found; renderTopTrendingCarousel(); renderBookWorkspace(); renderUserBookshelf(); const initialChapter = activeBook.chapters[activeChapterIdx]; if (initialChapter && chapterNeedsAI(initialChapter)) generateChapterWithAI(initialChapter); loadGoogleBookCovers();
   window.addEventListener("resize", () => { const ch = activeBook.chapters[activeChapterIdx]; if (ch) { drawStudyGraphs(ch); renderProceduralCanvasArt(document.getElementById("procVisualCanvas"), ch, currentMode); } });
   window.addEventListener("keydown", (e) => {
     if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
