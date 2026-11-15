@@ -452,15 +452,10 @@ function renderTopTrendingCarousel() {
 }
 
 const WAITING_FAMOUS_COVERS = [
-  { title: "Harry Potter and the Sorcerer's Stone", author: "J.K. Rowling", coverUrl: "https://covers.openlibrary.org/b/isbn/9780590353427-L.jpg?default=false", bg: "radial-gradient(circle at 30% 20%, #7c2d12 0%, #1e1b4b 55%, #090d16 100%)" },
-  { title: "The Winds of Winter", author: "George R. R. Martin", coverUrl: "", bg: "radial-gradient(circle at 50% 25%, #38bdf8 0%, #1e3a5f 40%, #090d16 100%)" },
-  { title: "Harry Potter and the Deathly Hallows", author: "J.K. Rowling", coverUrl: "https://covers.openlibrary.org/b/isbn/9780545010221-L.jpg?default=false", bg: "radial-gradient(circle at 40% 25%, #3f3f46 0%, #18181b 60%, #090d16 100%)" },
-  { title: "A Game of Thrones", author: "George R. R. Martin", coverUrl: "https://covers.openlibrary.org/b/isbn/9780553103540-L.jpg?default=false", bg: "radial-gradient(circle at 50% 20%, #475569 0%, #0f172a 65%, #020617 100%)" },
-  { title: "Dune", author: "Frank Herbert", coverUrl: "https://covers.openlibrary.org/b/isbn/9780441172719-L.jpg?default=false", bg: "radial-gradient(circle at 50% 30%, #d97706 0%, #78350f 55%, #1c1917 100%)" },
-  { title: "The Lord of the Rings", author: "J. R. R. Tolkien", coverUrl: "https://covers.openlibrary.org/b/isbn/9780618640157-L.jpg?default=false", bg: "radial-gradient(circle at 50% 25%, #b45309 0%, #14532d 55%, #052e16 100%)" },
-  { title: "The Alchemist", author: "Paulo Coelho", coverUrl: "https://covers.openlibrary.org/b/isbn/9780061122415-L.jpg?default=false", bg: "radial-gradient(circle at 45% 25%, #f59e0b 0%, #9a3412 55%, #1c1917 100%)" },
-  { title: "1984", author: "George Orwell", coverUrl: "https://covers.openlibrary.org/b/isbn/9780451524935-L.jpg?default=false", bg: "radial-gradient(circle at 50% 25%, #dc2626 0%, #450a0a 55%, #09090b 100%)" },
-  { title: "Atomic Habits", author: "James Clear", coverUrl: "https://covers.openlibrary.org/b/id/10521270-L.jpg?default=false", bg: "radial-gradient(circle at 50% 25%, #f59e0b 0%, #78350f 55%, #1c1917 100%)" }
+  { title: "Hogsmeade & Hogwarts", author: "Wizarding World", coverUrl: "assets/covers/hogwarts-hogsmeade.png", localCover: true, imageAlt: "Hogsmeade and Hogwarts signs inside a warmly lit prop shop.", bg: "radial-gradient(circle at 30% 20%, #7c2d12 0%, #1e1b4b 55%, #090d16 100%)" },
+  { title: "Hogwarts Great Hall", author: "Wizarding World", coverUrl: "assets/covers/hogwarts-great-hall.png", localCover: true, imageAlt: "A grand stone hall with vaulted beams and sunlit windows.", bg: "radial-gradient(circle at 50% 25%, #b08a50 0%, #40321f 55%, #090d16 100%)" },
+  { title: "The Winds of Winter", author: "George R. R. Martin", coverUrl: "assets/covers/winds-of-winter.png", localCover: true, imageAlt: "The Winds of Winter title against a snowy forest.", bg: "radial-gradient(circle at 50% 25%, #38bdf8 0%, #1e3a5f 40%, #090d16 100%)" },
+  { title: "The Complete Sherlock Holmes", author: "Arthur Conan Doyle", coverUrl: "assets/covers/complete-sherlock-holmes.png", localCover: true, imageAlt: "The Complete Sherlock Holmes cover with a teal 221B Baker Street doorway.", bg: "radial-gradient(circle at 50% 25%, #0f766e 0%, #134e4a 50%, #090d16 100%)" }
 ];
 const googleBooksCoverRequests = new Map();
 let waitingCoverIndex = 0;
@@ -503,7 +498,7 @@ async function fetchGoogleBookCover(book) {
 async function loadGoogleBookCovers() {
   const booksByTitle = new Map();
   [...TRENDING_BOOKS_CATALOG, ...WAITING_FAMOUS_COVERS].forEach(book => {
-    if (!book.coverUrl) return;
+    if (!book.coverUrl || book.localCover) return;
     const key = normalizeStr(`${book.title} ${book.author}`);
     if (!booksByTitle.has(key)) booksByTitle.set(key, []);
     booksByTitle.get(key).push(book);
@@ -551,9 +546,9 @@ function renderWaitingCoverBox() {
     stage.appendChild(box);
   }
   box.setAttribute("role", "img");
-  box.setAttribute("aria-label", `Featured book cover: ${item.title} by ${item.author}`);
+  box.setAttribute("aria-label", `Featured artwork: ${item.title} by ${item.author}`);
   const image = item.coverUrl
-    ? `<img class="waiting-cover-img" src="${escapeHtml(item.coverUrl)}" data-fallback-src="${escapeHtml(item.fallbackCoverUrl || "")}" alt="${escapeHtml(item.title)} cover" onload="this.classList.add('is-loaded')" onerror="if(this.dataset.fallbackSrc){this.src=this.dataset.fallbackSrc;this.dataset.fallbackSrc=''}else{this.hidden=true}" />`
+    ? `<img class="waiting-cover-img" src="${escapeHtml(item.coverUrl)}" data-fallback-src="${escapeHtml(item.fallbackCoverUrl || "")}" alt="${escapeHtml(item.imageAlt || `${item.title} cover`)}" onload="this.classList.add('is-loaded')" onerror="if(this.dataset.fallbackSrc){this.src=this.dataset.fallbackSrc;this.dataset.fallbackSrc=''}else{this.hidden=true}" />`
     : "";
   box.innerHTML = `
     <div class="waiting-cover-fallback" style="background: ${item.bg};">
