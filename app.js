@@ -451,11 +451,80 @@ function renderTopTrendingCarousel() {
   if (host) host.innerHTML = renderBookCoverCarousel();
 }
 
+const WAITING_FAMOUS_COVERS = [
+  { title: "Harry Potter and the Sorcerer's Stone", author: "J.K. Rowling", coverUrl: "https://covers.openlibrary.org/b/isbn/9780590353427-L.jpg?default=false", bg: "radial-gradient(circle at 30% 20%, #7c2d12 0%, #1e1b4b 55%, #090d16 100%)" },
+  { title: "The Winds of Winter", author: "George R. R. Martin", coverUrl: "", bg: "radial-gradient(circle at 50% 25%, #38bdf8 0%, #1e3a5f 40%, #090d16 100%)" },
+  { title: "Harry Potter and the Deathly Hallows", author: "J.K. Rowling", coverUrl: "https://covers.openlibrary.org/b/isbn/9780545010221-L.jpg?default=false", bg: "radial-gradient(circle at 40% 25%, #3f3f46 0%, #18181b 60%, #090d16 100%)" },
+  { title: "A Game of Thrones", author: "George R. R. Martin", coverUrl: "https://covers.openlibrary.org/b/isbn/9780553103540-L.jpg?default=false", bg: "radial-gradient(circle at 50% 20%, #475569 0%, #0f172a 65%, #020617 100%)" },
+  { title: "Dune", author: "Frank Herbert", coverUrl: "https://covers.openlibrary.org/b/isbn/9780441172719-L.jpg?default=false", bg: "radial-gradient(circle at 50% 30%, #d97706 0%, #78350f 55%, #1c1917 100%)" },
+  { title: "The Lord of the Rings", author: "J. R. R. Tolkien", coverUrl: "https://covers.openlibrary.org/b/isbn/9780618640157-L.jpg?default=false", bg: "radial-gradient(circle at 50% 25%, #b45309 0%, #14532d 55%, #052e16 100%)" },
+  { title: "The Alchemist", author: "Paulo Coelho", coverUrl: "https://covers.openlibrary.org/b/isbn/9780061122415-L.jpg?default=false", bg: "radial-gradient(circle at 45% 25%, #f59e0b 0%, #9a3412 55%, #1c1917 100%)" },
+  { title: "1984", author: "George Orwell", coverUrl: "https://covers.openlibrary.org/b/isbn/9780451524935-L.jpg?default=false", bg: "radial-gradient(circle at 50% 25%, #dc2626 0%, #450a0a 55%, #09090b 100%)" },
+  { title: "Atomic Habits", author: "James Clear", coverUrl: "https://covers.openlibrary.org/b/id/10521270-L.jpg?default=false", bg: "radial-gradient(circle at 50% 25%, #f59e0b 0%, #78350f 55%, #1c1917 100%)" }
+];
+let waitingCoverIndex = 0;
+let waitingCoverTimer = null;
+
+function renderWaitingCoverBox() {
+  const stage = document.querySelector(".visual-stage");
+  if (!stage) return;
+  const item = WAITING_FAMOUS_COVERS[waitingCoverIndex];
+  let box = stage.querySelector(".waiting-cover-box");
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "waiting-cover-box";
+    stage.appendChild(box);
+  }
+  box.setAttribute("role", "img");
+  box.setAttribute("aria-label", `Featured book cover: ${item.title} by ${item.author}`);
+  const image = item.coverUrl
+    ? `<img class="waiting-cover-img" src="${item.coverUrl}" alt="${escapeHtml(item.title)} cover" onerror="this.hidden=true" />`
+    : "";
+  box.innerHTML = `
+    <div class="waiting-cover-fallback" style="background: ${item.bg};">
+      <span class="wc-eyebrow">Featured Book</span>
+      <strong class="wc-title">${escapeHtml(item.title)}</strong>
+      <span class="wc-author">by ${escapeHtml(item.author)}</span>
+    </div>
+    ${image}
+    <div class="waiting-cover-overlay">
+      <div class="waiting-cover-meta">
+        <strong>${escapeHtml(item.title)}</strong>
+        <span>${escapeHtml(item.author)}</span>
+      </div>
+      <span class="waiting-cover-pill">Preparing chapter visual…</span>
+    </div>`;
+}
+
+function startWaitingCoverSlideshow() {
+  renderWaitingCoverBox();
+  if (waitingCoverTimer || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  waitingCoverTimer = setInterval(() => {
+    waitingCoverIndex = (waitingCoverIndex + 1) % WAITING_FAMOUS_COVERS.length;
+    renderWaitingCoverBox();
+  }, 10000);
+}
+
+function stopWaitingCoverSlideshow() {
+  if (waitingCoverTimer) {
+    clearInterval(waitingCoverTimer);
+    waitingCoverTimer = null;
+  }
+  document.querySelector(".waiting-cover-box")?.remove();
+}
+
 function loadChapterVisuals(ch) {
   renderProceduralCanvasArt(document.getElementById("procVisualCanvas"), ch, currentMode);
   const aiSvg = currentMode === "story" ? ch.storySvg : ch.studySvg;
-  document.getElementById("svgVisualContainer").innerHTML = aiSvg ? aiSvg : buildChapterSvgOverlay(ch, currentMode);
-  document.getElementById("visualStatusPill").textContent = aiSvg ? "✨ AI-Crafted SVG Visual" : (currentMode === "story" ? "🎨 Studio Story Scene" : "📐 Study Schematic");
+  const container = document.getElementById("svgVisualContainer");
+  container.innerHTML = aiSvg ? aiSvg : buildChapterSvgOverlay(ch, currentMode);
+  if (aiSvg) {
+    stopWaitingCoverSlideshow();
+    document.getElementById("visualStatusPill").textContent = "✨ AI-Crafted SVG Visual";
+  } else {
+    startWaitingCoverSlideshow();
+    document.getElementById("visualStatusPill").textContent = "📚 Waiting for chapter visual";
+  }
 }
 
 function selectCarouselBook(index) {
