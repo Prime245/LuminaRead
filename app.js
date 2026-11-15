@@ -5,6 +5,8 @@ let lastSearchCandidates = [];
 let forceTopCount = null;
 let lastCertaintyScore = 92;
 let visualSeed = 101;
+let carouselVisualOverride = null;
+const generatingChapters = new WeakSet();
 
 let isSpeaking = false;
 let speechRate = 1.0;
@@ -200,6 +202,8 @@ async function generateChapterWithAI(ch, forceRefresh = false) {
   const banner = document.getElementById("aiStatusBanner"), statusText = document.getElementById("aiBannerText");
   banner.classList.remove("hidden"); banner.classList.add("generating");
   statusText.textContent = `🤖 ${aiConfig.provider.toUpperCase()} is crafting Story, Study Cheat Sheet, Quiz & Custom SVG Visuals for Chapter ${ch.number}...`;
+  generatingChapters.add(ch);
+  if (activeBook.chapters[activeChapterIdx] === ch) loadChapterVisuals(ch);
 
   const prompt = `You are a world-class educator and master storyteller. Analyze this book chapter and return ONLY valid JSON.
 Book: "${activeBook.title}" by ${activeBook.author}
@@ -257,6 +261,9 @@ Return strictly this JSON:
   } catch (err) {
     banner.classList.remove("generating");
     statusText.textContent = `⚠️ AI: ${err.message} — Using Smart Local Mode`;
+  } finally {
+    generatingChapters.delete(ch);
+    if (activeBook.chapters[activeChapterIdx] === ch) loadChapterVisuals(ch);
   }
 }
 
@@ -390,11 +397,107 @@ function buildChapterSvgOverlay(chapter, mode) {
   return `<svg viewBox="0 0 800 350" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><path d="M235,170 L310,170" stroke="#06b6d4" stroke-width="2.5"/><path d="M490,170 L565,170" stroke="#3b82f6" stroke-width="2.5"/><path d="M650,120 Q400,38 150,120" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-dasharray="5 4"/><text x="400" y="65" text-anchor="middle" fill="#fbbf24" font-family="JetBrains Mono, monospace" font-size="11">CONCEPT FLOW &amp; REINFORCEMENT LOOP</text><g transform="translate(65, 125)"><rect width="170" height="90" rx="12" fill="rgba(9, 20, 36, 0.9)" stroke="#06b6d4" stroke-width="2"/><text x="85" y="28" text-anchor="middle" fill="#06b6d4" font-size="10.5" font-weight="700">01 • CONCEPT</text><text x="85" y="55" text-anchor="middle" fill="#eef6ff" font-size="12.5" font-weight="600">${escapeHtml(n1)}</text></g><g transform="translate(315, 125)"><rect width="170" height="90" rx="12" fill="rgba(9, 20, 36, 0.9)" stroke="#3b82f6" stroke-width="2"/><text x="85" y="28" text-anchor="middle" fill="#3b82f6" font-size="10.5" font-weight="700">02 • MECHANISM</text><text x="85" y="55" text-anchor="middle" fill="#eef6ff" font-size="12.5" font-weight="600">${escapeHtml(n2)}</text></g><g transform="translate(565, 125)"><rect width="170" height="90" rx="12" fill="rgba(9, 20, 36, 0.9)" stroke="#10b981" stroke-width="2"/><text x="85" y="28" text-anchor="middle" fill="#10b981" font-size="10.5" font-weight="700">03 • OUTCOME</text><text x="85" y="55" text-anchor="middle" fill="#eef6ff" font-size="12.5" font-weight="600">${escapeHtml(n3)}</text></g></svg>`;
 }
 
+const TRENDING_BOOKS_CATALOG = [
+  { title: "Atomic Habits", author: "James Clear", year: "2018", category: "Behavioral Psychology", tags: ["habits", "behavioral", "psychology", "productivity", "systems"], coverUrl: "https://covers.openlibrary.org/b/id/10521270-L.jpg" },
+  { title: "Sapiens", author: "Yuval Noah Harari", year: "2011", category: "History & Anthropology", tags: ["history", "anthropology", "human", "civilization", "science"], coverUrl: "https://covers.openlibrary.org/b/id/8375046-L.jpg" },
+  { title: "The Psychology of Money", author: "Morgan Housel", year: "2020", category: "Finance & Behavior", tags: ["finance", "money", "behavior", "psychology", "investing"], coverUrl: "https://covers.openlibrary.org/b/id/10604642-L.jpg" },
+  { title: "Dune", author: "Frank Herbert", year: "1965", category: "Science Fiction", tags: ["science", "fiction", "fantasy", "adventure", "politics"], coverUrl: "https://covers.openlibrary.org/b/id/12627392-L.jpg" },
+  { title: "Thinking, Fast and Slow", author: "Daniel Kahneman", year: "2011", category: "Psychology & Decision Science", tags: ["psychology", "decision", "science", "behavior", "thinking"], coverUrl: "https://covers.openlibrary.org/b/id/8231990-L.jpg" },
+  { title: "The Alchemist", author: "Paulo Coelho", year: "1988", category: "Philosophy & Fiction", tags: ["philosophy", "fiction", "journey", "meaning", "inspiration"], coverUrl: "https://covers.openlibrary.org/b/id/12547191-L.jpg" },
+  { title: "Deep Work", author: "Cal Newport", year: "2016", category: "Productivity & Focus", tags: ["productivity", "focus", "work", "habits", "attention"], coverUrl: "https://covers.openlibrary.org/b/id/8228691-L.jpg" },
+  { title: "Meditations", author: "Marcus Aurelius", year: "180", category: "Philosophy & Stoicism", tags: ["philosophy", "stoicism", "history", "mindfulness", "meaning"], coverUrl: "https://covers.openlibrary.org/b/id/12860354-L.jpg" },
+  { title: "1984", author: "George Orwell", year: "1949", category: "Classic Fiction", tags: ["fiction", "classic", "politics", "dystopia", "society"], coverUrl: "https://covers.openlibrary.org/b/id/7222246-L.jpg" },
+  { title: "Zero to One", author: "Peter Thiel", year: "2014", category: "Startups & Innovation", tags: ["startups", "innovation", "business", "technology", "entrepreneurship"], coverUrl: "https://covers.openlibrary.org/b/id/8259443-L.jpg" }
+];
+
+function getPersonalizedCatalog() {
+  const stopWords = new Set(["about", "after", "also", "book", "from", "into", "that", "their", "them", "there", "these", "this", "with"]);
+  const interests = new Set();
+  getUserBookshelf().forEach(book => {
+    const topics = (book.chapters || []).flatMap(chapter => chapter.topicsCovered || []);
+    `${book.title || ""} ${book.author || ""} ${book.category || ""} ${topics.join(" ")}`.toLowerCase()
+      .match(/[a-z0-9]{3,}/g)?.forEach(word => {
+        if (!stopWords.has(word)) interests.add(word);
+      });
+  });
+
+  return TRENDING_BOOKS_CATALOG.map((book, index) => {
+    const terms = `${book.title} ${book.author} ${book.category} ${book.tags.join(" ")}`.toLowerCase()
+      .match(/[a-z0-9]{3,}/g) || [];
+    const score = terms.reduce((total, term) => total + (interests.has(term) ? 1 : 0), 0);
+    return { ...book, isForYou: score > 0, score, index };
+  }).sort((a, b) => b.score - a.score || a.index - b.index);
+}
+
+function renderBookCoverCarousel() {
+  const catalog = getPersonalizedCatalog();
+  const buildCard = (book, index) => `
+    <button class="carousel-book-card" type="button" onclick="selectCarouselBook(${index})" aria-label="Open ${escapeHtml(book.title)} by ${escapeHtml(book.author)}">
+      <span class="carousel-badge">${book.isForYou ? "✨ For You" : "🔥 Trending"}</span>
+      <img class="carousel-cover" src="${book.coverUrl}" alt="Cover of ${escapeHtml(book.title)}" onerror="this.hidden=true;this.nextElementSibling.hidden=false" />
+      <span class="carousel-cover-placeholder" hidden aria-hidden="true">📘</span>
+      <span class="carousel-book-title">${escapeHtml(book.title)}</span>
+      <span class="carousel-book-author">${escapeHtml(book.author)}</span>
+    </button>`;
+  const cardsHtml = catalog.map(buildCard).join("");
+  return `
+    <div class="book-carousel-wrap" role="region" aria-label="Book recommendations">
+      <div class="carousel-header-label">
+        <span>📚 Popular Around the World · Picked For You</span>
+        <span class="carousel-hint">Hover or focus to pause · Select a cover to open</span>
+      </div>
+      <div class="carousel-marquee">
+        <div class="carousel-track">${cardsHtml}</div>
+        <div class="carousel-track" aria-hidden="true" inert>${cardsHtml}</div>
+      </div>
+    </div>`;
+}
+
 function loadChapterVisuals(ch) {
   renderProceduralCanvasArt(document.getElementById("procVisualCanvas"), ch, currentMode);
   const aiSvg = currentMode === "story" ? ch.storySvg : ch.studySvg;
-  document.getElementById("svgVisualContainer").innerHTML = aiSvg ? aiSvg : buildChapterSvgOverlay(ch, currentMode);
-  document.getElementById("visualStatusPill").textContent = aiSvg ? "✨ AI-Crafted SVG Visual" : (currentMode === "story" ? "🎨 Studio Story Scene" : "📐 Study Schematic");
+  const isGenerating = generatingChapters.has(ch);
+  const useCarousel = currentMode === "story" && (isGenerating || (carouselVisualOverride === null ? !aiSvg : carouselVisualOverride));
+  const container = document.getElementById("svgVisualContainer");
+  const toggle = document.getElementById("carouselToggleBtn");
+  if (toggle) {
+    toggle.classList.toggle("hidden", currentMode !== "story");
+    toggle.textContent = useCarousel ? "🎨 Show Scene" : "🎬 Show Carousel";
+  }
+  if (useCarousel) {
+    container.innerHTML = renderBookCoverCarousel();
+    document.getElementById("visualStatusPill").textContent = isGenerating ? "🤖 AI visual generating · book picks" : "🎬 Popular & picked for you";
+  } else {
+    container.innerHTML = aiSvg ? aiSvg : buildChapterSvgOverlay(ch, currentMode);
+    document.getElementById("visualStatusPill").textContent = aiSvg ? "✨ AI-Crafted SVG Visual" : (currentMode === "story" ? "🎨 Studio Story Scene" : "📐 Study Schematic");
+  }
+}
+
+function toggleCarouselVisual() {
+  const ch = activeBook.chapters[activeChapterIdx];
+  if (!ch) return;
+  const aiSvg = currentMode === "story" ? ch.storySvg : ch.studySvg;
+  const isShowingCarousel = currentMode === "story" && (generatingChapters.has(ch) || (carouselVisualOverride === null ? !aiSvg : carouselVisualOverride));
+  carouselVisualOverride = !isShowingCarousel;
+  loadChapterVisuals(ch);
+}
+
+function selectCarouselBook(index) {
+  const book = getPersonalizedCatalog()[index];
+  if (!book) return;
+  activeBook = normalizeStr(book.title).includes("atomic habits")
+    ? BOOK_LIBRARY["atomic-habits"]
+    : synthesizeBookPackage({
+      ...book,
+      description: `An interactive exploration of ${book.title} by ${book.author} (${book.category}).`
+    });
+  activeChapterIdx = 0;
+  carouselVisualOverride = null;
+  saveBookToUserShelf(activeBook);
+  renderBookWorkspace();
+  stopAllAudio();
+  showToast(`📚 Opened "${activeBook.title}"`);
+  if (!activeBook.chapters[0].aiEnhanced) generateChapterWithAI(activeBook.chapters[0]);
 }
 
 function toggleVisualFrame() {
@@ -475,7 +578,7 @@ function renderSearchResults() {
 function selectSearchedBook(idx) {
   const cand = lastSearchCandidates[idx]; if (!cand) return;
   activeBook = normalizeStr(cand.title).includes("atomic habits") ? BOOK_LIBRARY["atomic-habits"] : synthesizeBookPackage(cand);
-  activeChapterIdx = 0; saveBookToUserShelf(activeBook); renderBookWorkspace(); stopAllAudio(); showToast(`Loaded "${activeBook.title}"`);
+  activeChapterIdx = 0; carouselVisualOverride = null; saveBookToUserShelf(activeBook); renderBookWorkspace(); stopAllAudio(); showToast(`Loaded "${activeBook.title}"`);
   if (!activeBook.chapters[0].aiEnhanced) generateChapterWithAI(activeBook.chapters[0]);
 }
 
@@ -561,7 +664,7 @@ async function handleBookUpload(event) {
     extractedChapters.push({ heading: `${terms[0]} & ${terms[1]}`, excerpt: slice.slice(0, 1800) });
   }
   activeBook = synthesizeBookPackage({ title: cleanTitle, author: "Uploaded Book Edition", year: new Date().getFullYear().toString(), category: `Uploaded (${ext.toUpperCase()})`, description: cleanText.slice(0, 320) }, extractedChapters);
-  activeChapterIdx = 0; saveBookToUserShelf(activeBook); renderBookWorkspace(); stopAllAudio(); generateChapterWithAI(activeBook.chapters[0]);
+  activeChapterIdx = 0; carouselVisualOverride = null; saveBookToUserShelf(activeBook); renderBookWorkspace(); stopAllAudio(); generateChapterWithAI(activeBook.chapters[0]);
 }
 
 /* ==========================================================================
@@ -654,7 +757,7 @@ function renderBookWorkspace() {
 }
 
 function selectChapter(idx) {
-  activeChapterIdx = idx; switchStageTab("lesson"); renderBookWorkspace(); stopAllAudio();
+  activeChapterIdx = idx; carouselVisualOverride = null; switchStageTab("lesson"); renderBookWorkspace(); stopAllAudio();
   const ch = activeBook.chapters[idx];
   if (ch && !ch.aiEnhanced) generateChapterWithAI(ch);
 }
@@ -899,6 +1002,7 @@ function loadBookFromUserShelf(idx) {
   if (!shelf[idx]) return;
   activeBook = shelf[idx];
   activeChapterIdx = 0;
+  carouselVisualOverride = null;
   localStorage.setItem(ACTIVE_BOOK_KEY, activeBook.title);
   renderBookWorkspace();
   stopAllAudio();
@@ -913,6 +1017,7 @@ function deleteBookFromUserShelf(idx, event) {
   if (removed && normalizeStr(activeBook.title) === normalizeStr(removed.title)) {
     activeBook = shelf[0] || BOOK_LIBRARY["atomic-habits"];
     activeChapterIdx = 0;
+    carouselVisualOverride = null;
     localStorage.setItem(ACTIVE_BOOK_KEY, activeBook.title);
     renderBookWorkspace();
   } else {

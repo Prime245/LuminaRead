@@ -10,5 +10,10 @@
 
 The key is only read by the `/api/gemini` serverless function; it is not exposed to browsers. The shared endpoint uses your Gemini quota, so monitor usage and configure limits for the API key and deployment.
 
+## Story Visual Recommendations
+- Story Mode shows a scrolling carousel of popular book picks when a chapter has no AI-created visual, and while one is generating.
+- Picks are ranked using titles, categories, and topics from the books saved on that user's private bookshelf. Select a cover to open its book, or use the visual footer toggle to switch between the carousel and scene.
+- Book recommendations use a curated catalog; personalization is local to the user's browser.
+
 ## Privacy & Per-User Bookshelf
 - Added/uploaded books are stored strictly in each user's own browser (`localStorage`), surviving refreshes and never visible to other users.
