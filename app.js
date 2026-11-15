@@ -253,7 +253,7 @@ async function callConfiguredLLM(promptText, responseSchema = null) {
       throw new Error(proxyData.error || `Gemini service returned HTTP ${proxyRes.status}.`);
     }
     let lastError = "Gemini API request failed.";
-    for (const model of ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]) {
+    for (const model of ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]) {
       const { response: res, data } = await fetchJsonWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(aiConfig.apiKey)}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }], generationConfig })
@@ -265,7 +265,7 @@ async function callConfiguredLLM(promptText, responseSchema = null) {
       }
       if (res.ok && candidate?.content?.parts?.[0]?.text) return candidate.content.parts[0].text;
       lastError = data?.error?.message || `Gemini API returned HTTP ${res.status} for ${model}.`;
-      if ([400, 401, 403, 429].includes(res.status)) throw new Error(lastError);
+      if ([400, 401, 403].includes(res.status)) throw new Error(lastError);
     }
     throw new Error(lastError);
   }

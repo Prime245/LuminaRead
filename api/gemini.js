@@ -13,7 +13,7 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: "Missing prompt" });
   }
 
-  const models = ["gemini-3.8-flash", "gemini-3.6-flash"];
+  const models = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
   const totalTimeoutMs = 55000;
   const deadline = Date.now() + totalTimeoutMs;
   const generationConfig = { responseMimeType: "application/json", maxOutputTokens: 8192 };
@@ -60,7 +60,7 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ text });
     }
     lastError = data?.error?.message || `HTTP ${response.status} on ${model}`;
-    if ([400, 401, 403, 429].includes(response.status)) break;
+    if ([400, 401, 403].includes(response.status)) break;
   }
 
   return res.status(502).json({ error: lastError === "Gemini request failed" ? `Gemini request exceeded its ${totalTimeoutMs / 1000}-second time budget.` : lastError });

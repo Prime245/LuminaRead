@@ -9,6 +9,7 @@
 4. Redeploy. The app uses this server-side key for Gemini requests, so visitors don't need to enter their own key. Leave the Personal API Key field blank and select Gemini.
 
 The deployment-level key is only read by the `/api/gemini` serverless function; it is not exposed to browsers. The shared endpoint uses your Gemini quota, so monitor usage and configure limits for the API key and deployment.
+Gemini generation tries Gemini 3.5 Flash-Lite first for faster, higher-throughput generation, with Gemini 3.1 Flash-Lite as a fallback. Interactive request quotas depend on the Google AI Studio project tier and are shown in AI Studio.
 Gemini requests have a 55-second server-side time budget within Vercel's 60-second function limit. The browser allows 65 seconds for a response. Chapter output uses a JSON schema and an 8,192-token ceiling to avoid truncated or malformed SVG JSON; uploaded books are split into lessons of about 1,200 characters which generate on demand. The browser starts Gemini generation when a chapter is missing either mode's SVG, and switches to its local visual if generation fails or times out. Gemini requires the deployed Vercel endpoint when no personal API key is supplied; opening `index.html` directly does not provide that backend.
 
 ## Story Visual Recommendations
