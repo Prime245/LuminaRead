@@ -5,8 +5,6 @@ let lastSearchCandidates = [];
 let forceTopCount = null;
 let lastCertaintyScore = 92;
 let visualSeed = 101;
-let carouselVisualOverride = null;
-const generatingChapters = new WeakSet();
 
 let isSpeaking = false;
 let speechRate = 1.0;
@@ -202,8 +200,6 @@ async function generateChapterWithAI(ch, forceRefresh = false) {
   const banner = document.getElementById("aiStatusBanner"), statusText = document.getElementById("aiBannerText");
   banner.classList.remove("hidden"); banner.classList.add("generating");
   statusText.textContent = `🤖 ${aiConfig.provider.toUpperCase()} is crafting Story, Study Cheat Sheet, Quiz & Custom SVG Visuals for Chapter ${ch.number}...`;
-  generatingChapters.add(ch);
-  if (activeBook.chapters[activeChapterIdx] === ch) loadChapterVisuals(ch);
 
   const prompt = `You are a world-class educator and master storyteller. Analyze this book chapter and return ONLY valid JSON.
 Book: "${activeBook.title}" by ${activeBook.author}
@@ -261,9 +257,6 @@ Return strictly this JSON:
   } catch (err) {
     banner.classList.remove("generating");
     statusText.textContent = `⚠️ AI: ${err.message} — Using Smart Local Mode`;
-  } finally {
-    generatingChapters.delete(ch);
-    if (activeBook.chapters[activeChapterIdx] === ch) loadChapterVisuals(ch);
   }
 }
 
@@ -453,33 +446,16 @@ function renderBookCoverCarousel() {
     </div>`;
 }
 
+function renderTopTrendingCarousel() {
+  const host = document.getElementById("trendingCarouselSection");
+  if (host) host.innerHTML = renderBookCoverCarousel();
+}
+
 function loadChapterVisuals(ch) {
   renderProceduralCanvasArt(document.getElementById("procVisualCanvas"), ch, currentMode);
   const aiSvg = currentMode === "story" ? ch.storySvg : ch.studySvg;
-  const isGenerating = generatingChapters.has(ch);
-  const useCarousel = currentMode === "story" && (isGenerating || (carouselVisualOverride === null ? !aiSvg : carouselVisualOverride));
-  const container = document.getElementById("svgVisualContainer");
-  const toggle = document.getElementById("carouselToggleBtn");
-  if (toggle) {
-    toggle.classList.toggle("hidden", currentMode !== "story");
-    toggle.textContent = useCarousel ? "🎨 Show Scene" : "🎬 Show Carousel";
-  }
-  if (useCarousel) {
-    container.innerHTML = renderBookCoverCarousel();
-    document.getElementById("visualStatusPill").textContent = isGenerating ? "🤖 AI visual generating · book picks" : "🎬 Popular & picked for you";
-  } else {
-    container.innerHTML = aiSvg ? aiSvg : buildChapterSvgOverlay(ch, currentMode);
-    document.getElementById("visualStatusPill").textContent = aiSvg ? "✨ AI-Crafted SVG Visual" : (currentMode === "story" ? "🎨 Studio Story Scene" : "📐 Study Schematic");
-  }
-}
-
-function toggleCarouselVisual() {
-  const ch = activeBook.chapters[activeChapterIdx];
-  if (!ch) return;
-  const aiSvg = currentMode === "story" ? ch.storySvg : ch.studySvg;
-  const isShowingCarousel = currentMode === "story" && (generatingChapters.has(ch) || (carouselVisualOverride === null ? !aiSvg : carouselVisualOverride));
-  carouselVisualOverride = !isShowingCarousel;
-  loadChapterVisuals(ch);
+  document.getElementById("svgVisualContainer").innerHTML = aiSvg ? aiSvg : buildChapterSvgOverlay(ch, currentMode);
+  document.getElementById("visualStatusPill").textContent = aiSvg ? "✨ AI-Crafted SVG Visual" : (currentMode === "story" ? "🎨 Studio Story Scene" : "📐 Study Schematic");
 }
 
 function selectCarouselBook(index) {
@@ -492,7 +468,6 @@ function selectCarouselBook(index) {
       description: `An interactive exploration of ${book.title} by ${book.author} (${book.category}).`
     });
   activeChapterIdx = 0;
-  carouselVisualOverride = null;
   saveBookToUserShelf(activeBook);
   renderBookWorkspace();
   stopAllAudio();
@@ -578,7 +553,7 @@ function renderSearchResults() {
 function selectSearchedBook(idx) {
   const cand = lastSearchCandidates[idx]; if (!cand) return;
   activeBook = normalizeStr(cand.title).includes("atomic habits") ? BOOK_LIBRARY["atomic-habits"] : synthesizeBookPackage(cand);
-  activeChapterIdx = 0; carouselVisualOverride = null; saveBookToUserShelf(activeBook); renderBookWorkspace(); stopAllAudio(); showToast(`Loaded "${activeBook.title}"`);
+  activeChapterIdx = 0; saveBookToUserShelf(activeBook); renderBookWorkspace(); stopAllAudio(); showToast(`Loaded "${activeBook.title}"`);
   if (!activeBook.chapters[0].aiEnhanced) generateChapterWithAI(activeBook.chapters[0]);
 }
 
@@ -664,7 +639,7 @@ async function handleBookUpload(event) {
     extractedChapters.push({ heading: `${terms[0]} & ${terms[1]}`, excerpt: slice.slice(0, 1800) });
   }
   activeBook = synthesizeBookPackage({ title: cleanTitle, author: "Uploaded Book Edition", year: new Date().getFullYear().toString(), category: `Uploaded (${ext.toUpperCase()})`, description: cleanText.slice(0, 320) }, extractedChapters);
-  activeChapterIdx = 0; carouselVisualOverride = null; saveBookToUserShelf(activeBook); renderBookWorkspace(); stopAllAudio(); generateChapterWithAI(activeBook.chapters[0]);
+  activeChapterIdx = 0; saveBookToUserShelf(activeBook); renderBookWorkspace(); stopAllAudio(); generateChapterWithAI(activeBook.chapters[0]);
 }
 
 /* ==========================================================================
@@ -757,7 +732,7 @@ function renderBookWorkspace() {
 }
 
 function selectChapter(idx) {
-  activeChapterIdx = idx; carouselVisualOverride = null; switchStageTab("lesson"); renderBookWorkspace(); stopAllAudio();
+  activeChapterIdx = idx; switchStageTab("lesson"); renderBookWorkspace(); stopAllAudio();
   const ch = activeBook.chapters[idx];
   if (ch && !ch.aiEnhanced) generateChapterWithAI(ch);
 }
@@ -960,7 +935,7 @@ function showToast(msg) { const el = document.getElementById("toast"); el.textCo
 function escapeHtml(str) { return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 
 window.addEventListener("DOMContentLoaded", () => {
-  loadAvailableVoices(); const _savedShelf = getUserBookshelf(); const _lastTitle = localStorage.getItem(ACTIVE_BOOK_KEY); const _found = _savedShelf.find(b => b.title === _lastTitle) || _savedShelf[0]; if (_found) activeBook = _found; renderBookWorkspace(); renderUserBookshelf();
+  loadAvailableVoices(); const _savedShelf = getUserBookshelf(); const _lastTitle = localStorage.getItem(ACTIVE_BOOK_KEY); const _found = _savedShelf.find(b => b.title === _lastTitle) || _savedShelf[0]; if (_found) activeBook = _found; renderTopTrendingCarousel(); renderBookWorkspace(); renderUserBookshelf();
   window.addEventListener("resize", () => { const ch = activeBook.chapters[activeChapterIdx]; if (ch) { drawStudyGraphs(ch); renderProceduralCanvasArt(document.getElementById("procVisualCanvas"), ch, currentMode); } });
   window.addEventListener("keydown", (e) => {
     if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
@@ -995,6 +970,7 @@ function saveBookToUserShelf(bookObj) {
     console.warn("Storage quota reached", e);
   }
   renderUserBookshelf();
+  renderTopTrendingCarousel();
 }
 
 function loadBookFromUserShelf(idx) {
@@ -1002,10 +978,10 @@ function loadBookFromUserShelf(idx) {
   if (!shelf[idx]) return;
   activeBook = shelf[idx];
   activeChapterIdx = 0;
-  carouselVisualOverride = null;
   localStorage.setItem(ACTIVE_BOOK_KEY, activeBook.title);
   renderBookWorkspace();
   stopAllAudio();
+  renderTopTrendingCarousel();
   showToast(`📖 Opened "${activeBook.title}"`);
 }
 
@@ -1017,12 +993,12 @@ function deleteBookFromUserShelf(idx, event) {
   if (removed && normalizeStr(activeBook.title) === normalizeStr(removed.title)) {
     activeBook = shelf[0] || BOOK_LIBRARY["atomic-habits"];
     activeChapterIdx = 0;
-    carouselVisualOverride = null;
     localStorage.setItem(ACTIVE_BOOK_KEY, activeBook.title);
     renderBookWorkspace();
   } else {
     renderUserBookshelf();
   }
+  renderTopTrendingCarousel();
   showToast(`🗑️ Removed "${removed?.title || 'Book'}" from your private shelf`);
 }
 
