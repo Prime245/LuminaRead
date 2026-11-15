@@ -14,11 +14,15 @@ module.exports = async function handler(req, res) {
   }
 
   const models = ["gemini-3.8-flash", "gemini-3.6-flash"];
+  const totalTimeoutMs = 55000;
+  const deadline = Date.now() + totalTimeoutMs;
   let lastError = "Gemini request failed";
 
   for (const model of models) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    const timeoutId = setTimeout(() => controller.abort(), remainingMs);
     let response, data;
     try {
       response = await fetch(
@@ -28,7 +32,7 @@ module.exports = async function handler(req, res) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
+            generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4096 }
           }),
           signal: controller.signal
         }
@@ -36,7 +40,7 @@ module.exports = async function handler(req, res) {
       data = await response.json();
     } catch (err) {
       lastError = controller.signal.aborted
-        ? `Gemini timed out after 20 seconds on ${model}`
+        ? `Gemini exceeded the ${totalTimeoutMs / 1000}-second total request budget while using ${model}.`
         : err.message;
       if (controller.signal.aborted) break;
       continue;
@@ -52,5 +56,5 @@ module.exports = async function handler(req, res) {
     if ([400, 401, 403, 429].includes(response.status)) break;
   }
 
-  return res.status(502).json({ error: lastError });
+  return res.status(502).json({ error: lastError === "Gemini request failed" ? `Gemini request exceeded its ${totalTimeoutMs / 1000}-second time budget.` : lastError });
 }

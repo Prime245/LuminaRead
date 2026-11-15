@@ -124,7 +124,7 @@ function chapterNeedsAI(ch) {
   return !ch.aiEnhanced || !ch.storySvg || !ch.studySvg;
 }
 
-async function fetchJsonWithTimeout(url, options, timeoutMs = 45000) {
+async function fetchJsonWithTimeout(url, options, timeoutMs = 65000) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -205,7 +205,7 @@ async function callConfiguredLLM(promptText) {
     for (const model of ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]) {
       const { response: res, data } = await fetchJsonWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(aiConfig.apiKey)}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }], generationConfig: { responseMimeType: "application/json" } })
+        body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4096 } })
       });
       if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) return data.candidates[0].content.parts[0].text;
       lastError = data?.error?.message || `Gemini API returned HTTP ${res.status} for ${model}.`;
@@ -241,26 +241,24 @@ Source Material: """${(ch.rawExcerpt || ch.storyNarrative.join(" ")).slice(0, 32
 Return strictly this JSON:
 {
   "cleanTitle": "Clear, engaging chapter title",
-  "storyNarrative": ["4 to 5 vivid storytelling sentences teaching this chapter's lesson naturally"],
-  "studyNarrative": ["4 crisp academic sentences explaining the concepts and mechanisms"],
+  "storyNarrative": ["3 concise vivid storytelling sentences teaching this chapter's lesson naturally"],
+  "studyNarrative": ["3 concise academic sentences explaining the concepts and mechanisms"],
   "storyMoral": "One memorable metaphor or moral takeaway",
   "studyTakeaway": "One concise analytical takeaway",
   "storyCharacters": ["Key Character or Concept 1 (Role)", "Key Character or Theme 2 (Role)"],
   "storyNextBridge": "One sentence bridging this story to the next lesson",
   "chapterSummary": "2-sentence executive summary of this chapter",
-  "pointsToRemember": ["High-yield point 1", "High-yield point 2", "High-yield point 3", "High-yield point 4"],
-  "topicsCovered": ["Topic 1", "Topic 2", "Topic 3", "Topic 4"],
-  "storySvg": "A valid, colorful 800x350 <svg viewBox='0 0 800 350'>...</svg> scene illustrating this chapter's story (gradients, shapes, labels, no script tags)",
-  "studySvg": "A valid, clean dark-blueprint 800x350 <svg viewBox='0 0 800 350'>...</svg> concept flowchart for Study Mode (boxes, arrows, labels, no script tags)",
+  "pointsToRemember": ["High-yield point 1", "High-yield point 2", "High-yield point 3"],
+  "topicsCovered": ["Topic 1", "Topic 2", "Topic 3"],
+  "storySvg": "A valid colorful 800x350 <svg viewBox='0 0 800 350'>...</svg> scene using at most 10 simple shapes and short labels; no scripts, filters, or long paths; keep SVG under 1400 characters",
+  "studySvg": "A valid dark-blueprint 800x350 <svg viewBox='0 0 800 350'>...</svg> concept flowchart using at most 10 simple boxes/arrows and short labels; no scripts, filters, or long paths; keep SVG under 1400 characters",
   "definitions": [
     {"term": "Term 1", "cat": "Category", "def": "Clear definition", "ex": "Concrete example"},
-    {"term": "Term 2", "cat": "Category", "def": "Clear definition", "ex": "Concrete example"},
-    {"term": "Term 3", "cat": "Category", "def": "Clear definition", "ex": "Concrete example"}
+    {"term": "Term 2", "cat": "Category", "def": "Clear definition", "ex": "Concrete example"}
   ],
   "quiz": [
     {"q": "Conceptual question 1", "options": ["Correct", "Wrong 1", "Wrong 2"], "answer": 0, "explanation": "Why this is right"},
-    {"q": "Conceptual question 2", "options": ["Wrong 1", "Correct", "Wrong 2"], "answer": 1, "explanation": "Why this is right"},
-    {"q": "Conceptual question 3", "options": ["Correct", "Wrong 1", "Wrong 2"], "answer": 0, "explanation": "Why this is right"}
+    {"q": "Conceptual question 2", "options": ["Wrong 1", "Correct", "Wrong 2"], "answer": 1, "explanation": "Why this is right"}
   ]
 }`;
 
@@ -747,6 +745,33 @@ function extractKeyTermsFromText(text) {
   return top;
 }
 
+function splitIntoChapterChunks(text, maxChars = 1200) {
+  const sentences = (text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text]).map(part => part.trim()).filter(Boolean);
+  const chunks = [];
+  let current = "";
+  const flush = () => {
+    if (current) chunks.push(current);
+    current = "";
+  };
+
+  for (const sentence of sentences) {
+    if (sentence.length <= maxChars) {
+      if (current && current.length + sentence.length + 1 > maxChars) flush();
+      current = current ? `${current} ${sentence}` : sentence;
+      continue;
+    }
+
+    flush();
+    for (const word of sentence.split(/\s+/)) {
+      if (current && current.length + word.length + 1 > maxChars) flush();
+      current = current ? `${current} ${word}` : word;
+    }
+    flush();
+  }
+  flush();
+  return chunks;
+}
+
 function synthesizeBookPackage(meta, rawChapters = null) {
   const title = meta.title || "Selected Book", author = meta.author || "Distinguished Author", category = meta.category || "Interdisciplinary Mastery";
   const desc = stripDryMetadata(meta.description) || `An exploration of ${title} by ${author}.`;
@@ -757,7 +782,7 @@ function synthesizeBookPackage(meta, rawChapters = null) {
     { heading: `Synthesis, Legacy & Mastery`, excerpt: `In the culmination of ${title}, individual threads unite into a lasting philosophy.` }
   ];
 
-  const builtChapters = chapters.slice(0, 6).map((ch, i) => {
+  const builtChapters = chapters.map((ch, i) => {
     const chNum = i + 1, cleanExcerpt = stripDryMetadata(ch.excerpt), cleanHeading = stripDryMetadata(ch.heading) || `Chapter ${chNum}`;
     const sentences = cleanExcerpt.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 20);
     const lead = sentences[0] || cleanExcerpt.slice(0, 220), next = sentences[1] || `Connecting these ideas reveals the bigger picture of ${title}.`;
@@ -810,15 +835,10 @@ async function handleBookUpload(event) {
   } else rawText = await file.text();
 
   const cleanText = stripDryMetadata(rawText), cleanTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
-  const sentences = cleanText.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 25);
-  const chunkCount = Math.min(5, Math.max(3, Math.ceil(sentences.length / 6))), perChunk = Math.max(2, Math.ceil(sentences.length / chunkCount));
-  const extractedChapters = [];
-  for (let i = 0; i < chunkCount; i++) {
-    const slice = sentences.slice(i * perChunk, (i + 1) * perChunk).join(" ");
-    if (!slice) continue;
+  const extractedChapters = splitIntoChapterChunks(cleanText).map((slice, i) => {
     const terms = extractKeyTermsFromText(slice);
-    extractedChapters.push({ heading: `${terms[0]} & ${terms[1]}`, excerpt: slice.slice(0, 1800) });
-  }
+    return { heading: `Lesson ${i + 1}: ${terms[0]} & ${terms[1]}`, excerpt: slice };
+  });
   activeBook = synthesizeBookPackage({ title: cleanTitle, author: "Uploaded Book Edition", year: new Date().getFullYear().toString(), category: `Uploaded (${ext.toUpperCase()})`, description: cleanText.slice(0, 320) }, extractedChapters);
   activeChapterIdx = 0; saveBookToUserShelf(activeBook); renderBookWorkspace(); stopAllAudio(); generateChapterWithAI(activeBook.chapters[0]);
 }
