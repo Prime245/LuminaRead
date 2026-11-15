@@ -455,7 +455,7 @@ const WAITING_FAMOUS_COVERS = [
   { title: "Hogsmeade & Hogwarts", author: "Wizarding World", coverUrl: "assets/covers/hogwarts-hogsmeade.png", localCover: true, imageAlt: "Hogsmeade and Hogwarts signs inside a warmly lit prop shop.", bg: "radial-gradient(circle at 30% 20%, #7c2d12 0%, #1e1b4b 55%, #090d16 100%)" },
   { title: "Hogwarts Great Hall", author: "Wizarding World", coverUrl: "assets/covers/hogwarts-great-hall.png", localCover: true, imageAlt: "A grand stone hall with vaulted beams and sunlit windows.", bg: "radial-gradient(circle at 50% 25%, #b08a50 0%, #40321f 55%, #090d16 100%)" },
   { title: "The Winds of Winter", author: "George R. R. Martin", coverUrl: "assets/covers/winds-of-winter.png", localCover: true, imageAlt: "The Winds of Winter title against a snowy forest.", bg: "radial-gradient(circle at 50% 25%, #38bdf8 0%, #1e3a5f 40%, #090d16 100%)" },
-  { title: "The Complete Sherlock Holmes", author: "Arthur Conan Doyle", coverUrl: "assets/covers/complete-sherlock-holmes.png", localCover: true, imageAlt: "The Complete Sherlock Holmes cover with a teal 221B Baker Street doorway.", bg: "radial-gradient(circle at 50% 25%, #0f766e 0%, #134e4a 50%, #090d16 100%)" }
+  { title: "The Complete Sherlock Holmes", author: "Arthur Conan Doyle", coverUrl: "assets/covers/complete-sherlock-holmes.png", localCover: true, imageFit: "contain", imageAlt: "The Complete Sherlock Holmes cover with a teal 221B Baker Street doorway.", bg: "radial-gradient(circle at 50% 25%, #0f766e 0%, #134e4a 50%, #090d16 100%)" }
 ];
 const googleBooksCoverRequests = new Map();
 let waitingCoverIndex = 0;
@@ -547,8 +547,9 @@ function renderWaitingCoverBox() {
   }
   box.setAttribute("role", "img");
   box.setAttribute("aria-label", `Featured artwork: ${item.title} by ${item.author}`);
+  const imageFitClass = item.imageFit === "contain" ? " waiting-cover-img-contain" : "";
   const image = item.coverUrl
-    ? `<img class="waiting-cover-img" src="${escapeHtml(item.coverUrl)}" data-fallback-src="${escapeHtml(item.fallbackCoverUrl || "")}" alt="${escapeHtml(item.imageAlt || `${item.title} cover`)}" onload="this.classList.add('is-loaded')" onerror="if(this.dataset.fallbackSrc){this.src=this.dataset.fallbackSrc;this.dataset.fallbackSrc=''}else{this.hidden=true}" />`
+    ? `<img class="waiting-cover-img${imageFitClass}" src="${escapeHtml(item.coverUrl)}" data-fallback-src="${escapeHtml(item.fallbackCoverUrl || "")}" alt="${escapeHtml(item.imageAlt || `${item.title} cover`)}" onload="this.classList.add('is-loaded')" onerror="if(this.dataset.fallbackSrc){this.src=this.dataset.fallbackSrc;this.dataset.fallbackSrc=''}else{this.hidden=true}" />`
     : "";
   box.innerHTML = `
     <div class="waiting-cover-fallback" style="background: ${item.bg};">

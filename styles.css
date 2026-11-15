@@ -180,6 +180,8 @@ body.mode-study::before {
 .waiting-cover-box { position: absolute; inset: 0; z-index: 6; overflow: hidden; border-radius: inherit; background: #090d16; animation: waitingCoverFade 0.8s ease; }
 .waiting-cover-img { position: absolute; inset: 0; z-index: 1; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; filter: brightness(0.92) contrast(1.04) saturate(1.06); opacity: 0; transition: opacity 0.65s ease; }
 .waiting-cover-img.is-loaded { opacity: 1; animation: waitingCoverZoom 10s linear forwards; }
+.waiting-cover-img-contain { object-fit: contain; background-color: #090d16; filter: none; }
+.waiting-cover-img-contain.is-loaded { animation: none; }
 .waiting-cover-fallback { position: absolute; inset: 0; z-index: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; color: #f8fafc; text-align: center; }
 .waiting-cover-fallback .wc-eyebrow { margin-bottom: 0.75rem; font-size: 0.75rem; letter-spacing: 0.22em; opacity: 0.8; text-transform: uppercase; }
 .waiting-cover-fallback .wc-title { max-width: 16ch; font-size: clamp(1.6rem, 3.2vw, 2.5rem); font-weight: 800; line-height: 1.15; text-shadow: 0 6px 24px rgba(0, 0, 0, 0.6); }
